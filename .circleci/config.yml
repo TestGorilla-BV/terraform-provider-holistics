@@ -93,7 +93,16 @@ jobs:
           # GPG_PRIVATE_KEY: ASCII-armored, base64-encoded private key.
           # GPG_FINGERPRINT: long-form fingerprint (40-hex), matches the key
           #                  registered at registry.terraform.io.
+          # GPG_PASSPHRASE:  passphrase for the key (set to empty string if
+          #                  the key has none). Required: gpg refuses to sign
+          #                  in --pinentry-mode loopback without it.
           command: |
+            mkdir -p ~/.gnupg
+            chmod 700 ~/.gnupg
+            # Allow loopback pinentry so gpg can read the passphrase from
+            # command-line args instead of a TTY (which CI lacks).
+            echo "allow-loopback-pinentry" > ~/.gnupg/gpg-agent.conf
+            gpgconf --kill gpg-agent
             echo "$GPG_PRIVATE_KEY" | base64 -d | gpg --batch --import
             echo "${GPG_FINGERPRINT}:6:" | gpg --import-ownertrust
             gpg --list-secret-keys --keyid-format=long
