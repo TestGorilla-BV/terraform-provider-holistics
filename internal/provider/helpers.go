@@ -8,6 +8,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+
+	"github.com/TestGorilla-BV/terraform-provider-holistics/internal/client"
 )
 
 func int64planUseStateForUnknown() planmodifier.Int64 {
@@ -108,6 +110,16 @@ func stringFromPtr(p *string) types.String {
 		return types.StringNull()
 	}
 	return types.StringValue(*p)
+}
+
+// stringFromFlexibleID maps an empty FlexibleID to null so that fields like
+// `model_id` don't drift from "plan: null" to "state: empty string" after a
+// round-trip through the API.
+func stringFromFlexibleID(f client.FlexibleID) types.String {
+	if f == "" {
+		return types.StringNull()
+	}
+	return types.StringValue(string(f))
 }
 
 func boolPtrFromTF(b types.Bool) *bool {

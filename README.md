@@ -8,13 +8,14 @@ A Terraform provider for [Holistics](https://holistics.io), built on the [Plugin
 
 ### Resources
 
-| Resource                       | API endpoint            |
-|--------------------------------|-------------------------|
-| `holistics_group`              | `/groups`               |
-| `holistics_user_attribute`     | `/user_attributes`      |
-| `holistics_data_schedule`      | `/data_schedules`       |
-| `holistics_data_alert`         | `/data_alerts`          |
-| `holistics_shareable_link`     | `/shareable_links`      |
+| Resource                       | API endpoints                                |
+|--------------------------------|----------------------------------------------|
+| `holistics_group`              | `/groups`                                    |
+| `holistics_user`               | `/users/invite`, `/users/{id}`, `/users/{id}/restore` |
+| `holistics_user_attribute`     | `/user_attributes`                           |
+| `holistics_data_schedule`      | `/data_schedules`                            |
+| `holistics_data_alert`         | `/data_alerts`                               |
+| `holistics_shareable_link`     | `/shareable_links`                           |
 
 ### Data sources
 
@@ -81,6 +82,7 @@ See [examples/](./examples/).
 - **Polymorphic destinations.** Both `holistics_data_schedule` and `holistics_data_alert` accept polymorphic `dest` payloads on the API side. The provider exposes them as separate optional nested attributes (`email_dest`, `slack_dest`, `sftp_dest`, `google_sheet_dest`, `email_subscription_dest`, `webhook_dest`); exactly one must be set.
 - **Group user membership.** The API exposes group user assignments via `/groups/{id}/add_user/{user_id}` and `/groups/{id}/remove_user/{user_id}` rather than the create/update body. The provider diffs the desired vs current `user_ids` set and issues the appropriate add/remove calls.
 - **User reads.** Neither `/users/{id}` nor `/user_attributes/{id}` expose a `GET`, so the provider paginates the list endpoint and filters client-side.
+- **User lifecycle.** Holistics has no synchronous "create user" call — `POST /users/invite` returns an async job, and the user record materialises shortly after. The provider waits up to 15s for the record to appear, then issues a follow-up `PUT` for fields not settable at invite time (`name`, `title`, `job_title`). `DELETE /users/{id}` is a *soft* delete, so the provider transparently calls `POST /users/{id}/restore` if a subsequent apply re-invites the same email — letting `terraform destroy && terraform apply` round-trip cleanly. `POST /users/{id}/resend_invite` and `POST /users/{id}/revoke_authentication_token` aren't surfaced as Terraform actions; setting `allow_authentication_token = false` on update has the same effect as the revoke endpoint.
 - **Condition values.** The OpenAPI `ConditionValue` is `anyOf [string, boolean, number]`. The provider keeps `values = list(string)` on the Terraform side but the underlying client coerces strings to the matching JSON type on the wire: `"true"`/`"false"` become booleans, canonical numeric strings (e.g. `"42"`, `"-3.14"`, `"1e3"`) become numbers, everything else stays a string. Edge case: literal strings that look like booleans or numbers can't survive the round-trip — uncommon for filter values but worth knowing.
 
 ## Running tests

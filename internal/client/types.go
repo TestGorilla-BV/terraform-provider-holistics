@@ -97,6 +97,41 @@ func isCanonicalNumberString(s string) bool {
 	return true
 }
 
+// FlexibleID represents a Holistics identifier that the OpenAPI spec types as
+// `anyOf: [integer, string]` — most commonly source_id on alerts and model_id
+// inside field paths. We hold the value as a Go string for ergonomics and emit
+// it as a JSON number when it parses as an integer, otherwise as a JSON string.
+type FlexibleID string
+
+func (f FlexibleID) MarshalJSON() ([]byte, error) {
+	if f == "" {
+		return []byte(`null`), nil
+	}
+	s := string(f)
+	if _, err := strconv.ParseInt(s, 10, 64); err == nil {
+		return []byte(s), nil
+	}
+	return json.Marshal(s)
+}
+
+func (f *FlexibleID) UnmarshalJSON(data []byte) error {
+	s := string(data)
+	if s == "null" || s == "" {
+		*f = ""
+		return nil
+	}
+	if len(s) >= 2 && s[0] == '"' && s[len(s)-1] == '"' {
+		var str string
+		if err := json.Unmarshal(data, &str); err != nil {
+			return err
+		}
+		*f = FlexibleID(str)
+		return nil
+	}
+	*f = FlexibleID(s)
+	return nil
+}
+
 type Condition struct {
 	Modifier *string          `json:"modifier,omitempty"`
 	Operator string           `json:"operator"`

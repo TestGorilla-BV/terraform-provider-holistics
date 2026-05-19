@@ -81,10 +81,10 @@ func (d *DataAlertDest) UnmarshalJSON(data []byte) error {
 }
 
 type FieldPath struct {
-	FieldName string      `json:"field_name"`
-	ModelID   json.Number `json:"model_id,omitempty"`
-	DataSetID *int        `json:"data_set_id,omitempty"`
-	IsMetric  *bool       `json:"is_metric,omitempty"`
+	FieldName string     `json:"field_name"`
+	ModelID   FlexibleID `json:"model_id,omitempty"`
+	DataSetID *int       `json:"data_set_id,omitempty"`
+	IsMetric  *bool      `json:"is_metric,omitempty"`
 }
 
 type VizCondition struct {
@@ -98,7 +98,7 @@ type VizCondition struct {
 type DataAlert struct {
 	ID                   *int                  `json:"id,omitempty"`
 	Title                *string               `json:"title,omitempty"`
-	SourceID             json.Number           `json:"source_id"`
+	SourceID             FlexibleID            `json:"source_id"`
 	SourceType           string                `json:"source_type"`
 	Dest                 DataAlertDest         `json:"dest"`
 	DynamicFilterPresets []DynamicFilterPreset `json:"dynamic_filter_presets"`

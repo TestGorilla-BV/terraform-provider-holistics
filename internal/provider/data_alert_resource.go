@@ -2,7 +2,6 @@ package provider
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"strconv"
 
@@ -271,7 +270,7 @@ func buildDataAlertInput(ctx context.Context, m *dataAlertResourceModel) (client
 	var diags diag.Diagnostics
 	out := client.DataAlert{
 		Title:      stringPtrFromTF(m.Title),
-		SourceID:   json.Number(m.SourceID.ValueString()),
+		SourceID:   client.FlexibleID(m.SourceID.ValueString()),
 		SourceType: m.SourceType.ValueString(),
 	}
 	if m.Schedule != nil {
@@ -358,7 +357,7 @@ func vizConditionsToAPI(ctx context.Context, in []vizConditionModel) ([]client.V
 		if vc.FieldPath != nil {
 			c.FieldPath = client.FieldPath{
 				FieldName: vc.FieldPath.FieldName.ValueString(),
-				ModelID:   json.Number(vc.FieldPath.ModelID.ValueString()),
+				ModelID:   client.FlexibleID(vc.FieldPath.ModelID.ValueString()),
 			}
 			if !vc.FieldPath.DataSetID.IsNull() && !vc.FieldPath.DataSetID.IsUnknown() {
 				v := int(vc.FieldPath.DataSetID.ValueInt64())
@@ -393,7 +392,7 @@ func writeDataAlertState(ctx context.Context, da *client.DataAlert, state *tfsdk
 	m := dataAlertResourceModel{
 		ID:         types.Int64Value(int64(*da.ID)),
 		Title:      stringFromPtr(da.Title),
-		SourceID:   types.StringValue(string(da.SourceID)),
+		SourceID:   stringFromFlexibleID(da.SourceID),
 		SourceType: types.StringValue(da.SourceType),
 		Schedule: &scheduleModel{
 			Repeat:     types.StringValue(da.Schedule.Repeat),
@@ -442,7 +441,7 @@ func vizConditionsFromAPI(ctx context.Context, in []client.VizCondition) ([]vizC
 		diags.Append(d...)
 		fp := &fieldPathModel{
 			FieldName: types.StringValue(vc.FieldPath.FieldName),
-			ModelID:   types.StringValue(string(vc.FieldPath.ModelID)),
+			ModelID:   stringFromFlexibleID(vc.FieldPath.ModelID),
 			IsMetric:  boolFromPtr(vc.FieldPath.IsMetric),
 		}
 		if vc.FieldPath.DataSetID != nil {

@@ -123,6 +123,7 @@ func (p *HolisticsProvider) Configure(ctx context.Context, req provider.Configur
 func (p *HolisticsProvider) Resources(_ context.Context) []func() resource.Resource {
 	return []func() resource.Resource{
 		NewGroupResource,
+		NewUserResource,
 		NewUserAttributeResource,
 		NewDataScheduleResource,
 		NewDataAlertResource,

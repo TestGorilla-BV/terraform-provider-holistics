@@ -228,7 +228,7 @@ func buildShareableLinkInput(ctx context.Context, m *shareableLinkResourceModel)
 			if rule.FieldPath != nil {
 				r.FieldPath = client.FieldPath{
 					FieldName: rule.FieldPath.FieldName.ValueString(),
-					ModelID:   json.Number(rule.FieldPath.ModelID.ValueString()),
+					ModelID:   client.FlexibleID(rule.FieldPath.ModelID.ValueString()),
 					IsMetric:  boolPtrFromTF(rule.FieldPath.IsMetric),
 				}
 				if !rule.FieldPath.DataSetID.IsNull() && !rule.FieldPath.DataSetID.IsUnknown() {
@@ -301,7 +301,7 @@ func writeShareableLinkState(ctx context.Context, sl *client.ShareableLink, pass
 			diags.Append(d...)
 			fp := &fieldPathModel{
 				FieldName: types.StringValue(rule.FieldPath.FieldName),
-				ModelID:   types.StringValue(string(rule.FieldPath.ModelID)),
+				ModelID:   stringFromFlexibleID(rule.FieldPath.ModelID),
 				IsMetric:  boolFromPtr(rule.FieldPath.IsMetric),
 			}
 			if rule.FieldPath.DataSetID != nil {

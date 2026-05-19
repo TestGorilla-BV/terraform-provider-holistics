@@ -24,6 +24,9 @@ type Server struct {
 	groupMembership map[int]map[int]bool
 	userAttributes  map[int]*userAttribute
 	dataSchedules   map[int]map[string]any
+	dataAlerts      map[int]map[string]any
+	shareableLinks  map[string]map[string]any
+	users           map[int]*user
 }
 
 type group struct {
@@ -40,6 +43,23 @@ type userAttribute struct {
 	IsSystemAttribute bool    `json:"is_system_attribute"`
 }
 
+type user struct {
+	ID                       int     `json:"id"`
+	Email                    string  `json:"email"`
+	Name                     *string `json:"name,omitempty"`
+	Title                    *string `json:"title,omitempty"`
+	JobTitle                 *string `json:"job_title,omitempty"`
+	Initials                 string  `json:"initials"`
+	Role                     string  `json:"role"`
+	IsDeleted                bool    `json:"is_deleted"`
+	IsActivated              bool    `json:"is_activated"`
+	HasAuthenticationToken   bool    `json:"has_authentication_token"`
+	AllowAuthenticationToken bool    `json:"allow_authentication_token"`
+	EnableExportData         bool    `json:"enable_export_data"`
+	CreatedAt                string  `json:"created_at"`
+	GroupIDs                 []int   `json:"group_ids"`
+}
+
 // New starts a mock server and returns it. Call srv.Close when done.
 func New() *Server {
 	s := &Server{
@@ -48,6 +68,9 @@ func New() *Server {
 		groupMembership: map[int]map[int]bool{},
 		userAttributes:  map[int]*userAttribute{},
 		dataSchedules:   map[int]map[string]any{},
+		dataAlerts:      map[int]map[string]any{},
+		shareableLinks:  map[string]map[string]any{},
+		users:           map[int]*user{},
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/v2/groups", s.handleGroupsCollection)
@@ -56,6 +79,13 @@ func New() *Server {
 	mux.HandleFunc("/api/v2/user_attributes/", s.handleUserAttributesItem)
 	mux.HandleFunc("/api/v2/data_schedules", s.handleDataSchedulesCollection)
 	mux.HandleFunc("/api/v2/data_schedules/", s.handleDataSchedulesItem)
+	mux.HandleFunc("/api/v2/data_alerts", s.handleDataAlertsCollection)
+	mux.HandleFunc("/api/v2/data_alerts/", s.handleDataAlertsItem)
+	mux.HandleFunc("/api/v2/shareable_links", s.handleShareableLinksCollection)
+	mux.HandleFunc("/api/v2/shareable_links/", s.handleShareableLinksItem)
+	mux.HandleFunc("/api/v2/users", s.handleUsersList)
+	mux.HandleFunc("/api/v2/users/", s.handleUsersItem)
+	mux.HandleFunc("/api/v2/users/invite", s.handleUsersInvite)
 	s.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("X-Holistics-Key") == "" {
 			respondError(w, http.StatusUnauthorized, "AuthError", "missing api key")
@@ -309,5 +339,295 @@ func (s *Server) handleDataSchedulesItem(w http.ResponseWriter, r *http.Request)
 		respondJSON(w, http.StatusOK, map[string]any{"message": "deleted"})
 	default:
 		w.WriteHeader(http.StatusMethodNotAllowed)
+	}
+}
+
+// ----- Data Alerts -----
+
+func (s *Server) handleDataAlertsCollection(w http.ResponseWriter, r *http.Request) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	var body struct {
+		DataAlert map[string]any `json:"data_alert"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		respondError(w, http.StatusBadRequest, "InvalidParameterError", err.Error())
+		return
+	}
+	id := s.nextResourceID()
+	body.DataAlert["id"] = id
+	s.dataAlerts[id] = body.DataAlert
+	respondJSON(w, http.StatusCreated, map[string]any{"data_alert": body.DataAlert})
+}
+
+func (s *Server) handleDataAlertsItem(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.Atoi(strings.TrimPrefix(r.URL.Path, "/api/v2/data_alerts/"))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	da, ok := s.dataAlerts[id]
+	if !ok {
+		respondError(w, http.StatusNotFound, "NotFoundError", "data_alert not found")
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		respondJSON(w, http.StatusOK, map[string]any{"data_alert": da})
+	case http.MethodPut:
+		var body struct {
+			DataAlert map[string]any `json:"data_alert"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			respondError(w, http.StatusBadRequest, "InvalidParameterError", err.Error())
+			return
+		}
+		body.DataAlert["id"] = id
+		s.dataAlerts[id] = body.DataAlert
+		respondJSON(w, http.StatusOK, map[string]any{"data_alert": body.DataAlert})
+	case http.MethodDelete:
+		delete(s.dataAlerts, id)
+		respondJSON(w, http.StatusOK, map[string]any{"message": "deleted"})
+	default:
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	}
+}
+
+// ----- Shareable Links -----
+
+func (s *Server) handleShareableLinksCollection(w http.ResponseWriter, r *http.Request) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	var body struct {
+		ShareableLink map[string]any `json:"shareable_link"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		respondError(w, http.StatusBadRequest, "InvalidParameterError", err.Error())
+		return
+	}
+	id := strconv.Itoa(s.nextResourceID())
+	body.ShareableLink["id"] = id
+	s.shareableLinks[id] = body.ShareableLink
+	respondJSON(w, http.StatusCreated, map[string]any{"shareable_link": body.ShareableLink})
+}
+
+func (s *Server) handleShareableLinksItem(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimPrefix(r.URL.Path, "/api/v2/shareable_links/")
+	if id == "" {
+		http.NotFound(w, r)
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	sl, ok := s.shareableLinks[id]
+	if !ok {
+		respondError(w, http.StatusNotFound, "NotFoundError", "shareable_link not found")
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		respondJSON(w, http.StatusOK, map[string]any{"shareable_link": sl})
+	case http.MethodPut:
+		var body struct {
+			ShareableLink map[string]any `json:"shareable_link"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			respondError(w, http.StatusBadRequest, "InvalidParameterError", err.Error())
+			return
+		}
+		body.ShareableLink["id"] = id
+		s.shareableLinks[id] = body.ShareableLink
+		respondJSON(w, http.StatusOK, map[string]any{"shareable_link": body.ShareableLink})
+	case http.MethodDelete:
+		delete(s.shareableLinks, id)
+		respondJSON(w, http.StatusOK, map[string]any{"message": "deleted"})
+	default:
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	}
+}
+
+// ----- Users -----
+
+var userItemRe = regexp.MustCompile(`^/api/v2/users/(\d+)(?:/(restore))?$`)
+
+func (s *Server) handleUsersList(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	q := r.URL.Query()
+	searchTerm := strings.ToLower(q.Get("search_term"))
+	wantIDs := map[int]bool{}
+	for _, raw := range q["ids[]"] {
+		if id, err := strconv.Atoi(raw); err == nil {
+			wantIDs[id] = true
+		}
+	}
+
+	out := make([]*user, 0, len(s.users))
+	for _, u := range s.users {
+		if len(wantIDs) > 0 && !wantIDs[u.ID] {
+			continue
+		}
+		if searchTerm != "" && !strings.Contains(strings.ToLower(u.Email), searchTerm) {
+			continue
+		}
+		out = append(out, u)
+	}
+	respondJSON(w, http.StatusOK, map[string]any{
+		"users":    out,
+		"counters": map[string]any{},
+		"groups":   map[string]any{},
+		"cursors":  map[string]any{"next": nil},
+	})
+}
+
+func (s *Server) handleUsersInvite(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	var body struct {
+		Emails                   []string `json:"emails"`
+		Role                     string   `json:"role"`
+		AllowAuthenticationToken *bool    `json:"allow_authentication_token,omitempty"`
+		EnableExportData         *bool    `json:"enable_export_data,omitempty"`
+		GroupIDs                 []int    `json:"group_ids,omitempty"`
+		Message                  *string  `json:"message,omitempty"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		respondError(w, http.StatusBadRequest, "InvalidParameterError", err.Error())
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, email := range body.Emails {
+		// Reject if a non-deleted user with this email already exists.
+		for _, u := range s.users {
+			if !u.IsDeleted && strings.EqualFold(u.Email, email) {
+				respondError(w, http.StatusUnprocessableEntity, "InvalidOperationError", "email already in use")
+				return
+			}
+		}
+		u := &user{
+			ID:                       s.nextResourceID(),
+			Email:                    email,
+			Role:                     body.Role,
+			Initials:                 strings.ToUpper(string(email[0])),
+			IsActivated:              false,
+			CreatedAt:                "2026-01-01T00:00:00Z",
+			AllowAuthenticationToken: body.AllowAuthenticationToken != nil && *body.AllowAuthenticationToken,
+			EnableExportData:         body.EnableExportData != nil && *body.EnableExportData,
+			GroupIDs:                 append([]int(nil), body.GroupIDs...),
+		}
+		s.users[u.ID] = u
+	}
+	respondJSON(w, http.StatusOK, map[string]any{"job": map[string]any{"id": s.nextResourceID()}})
+}
+
+func (s *Server) handleUsersItem(w http.ResponseWriter, r *http.Request) {
+	// Catch /users/invite before it gets here.
+	if r.URL.Path == "/api/v2/users/invite" {
+		s.handleUsersInvite(w, r)
+		return
+	}
+	m := userItemRe.FindStringSubmatch(r.URL.Path)
+	if m == nil {
+		http.NotFound(w, r)
+		return
+	}
+	id, _ := strconv.Atoi(m[1])
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	u, ok := s.users[id]
+	if !ok {
+		respondError(w, http.StatusNotFound, "NotFoundError", "user not found")
+		return
+	}
+
+	if m[2] == "restore" {
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		u.IsDeleted = false
+		respondJSON(w, http.StatusOK, map[string]any{"message": "restored"})
+		return
+	}
+
+	switch r.Method {
+	case http.MethodPut:
+		var body struct {
+			User map[string]any `json:"user"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			respondError(w, http.StatusBadRequest, "InvalidParameterError", err.Error())
+			return
+		}
+		applyUserUpdate(u, body.User)
+		respondJSON(w, http.StatusOK, u)
+	case http.MethodDelete:
+		u.IsDeleted = true
+		respondJSON(w, http.StatusOK, map[string]any{"message": "soft-deleted"})
+	default:
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	}
+}
+
+func applyUserUpdate(u *user, body map[string]any) {
+	if v, ok := body["name"]; ok {
+		if s, ok := v.(string); ok {
+			u.Name = &s
+		}
+	}
+	if v, ok := body["title"]; ok {
+		if s, ok := v.(string); ok {
+			u.Title = &s
+		}
+	}
+	if v, ok := body["job_title"]; ok {
+		if s, ok := v.(string); ok {
+			u.JobTitle = &s
+		}
+	}
+	if v, ok := body["role"]; ok {
+		if s, ok := v.(string); ok {
+			u.Role = s
+		}
+	}
+	if v, ok := body["allow_authentication_token"]; ok {
+		if b, ok := v.(bool); ok {
+			u.AllowAuthenticationToken = b
+		}
+	}
+	if v, ok := body["enable_export_data"]; ok {
+		if b, ok := v.(bool); ok {
+			u.EnableExportData = b
+		}
+	}
+	if v, ok := body["group_ids"]; ok {
+		if arr, ok := v.([]any); ok {
+			ids := make([]int, 0, len(arr))
+			for _, n := range arr {
+				if f, ok := n.(float64); ok {
+					ids = append(ids, int(f))
+				}
+			}
+			u.GroupIDs = ids
+		}
 	}
 }
