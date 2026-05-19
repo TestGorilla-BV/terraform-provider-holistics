@@ -12,11 +12,13 @@ type Tag struct {
 }
 
 func (c *Client) ListTags(ctx context.Context) ([]Tag, error) {
-	var out struct {
-		Tags []Tag `json:"tags"`
-	}
-	if err := c.Do(ctx, http.MethodGet, "/tags", nil, nil, &out); err != nil {
-		return nil, err
-	}
-	return out.Tags, nil
+	return c.tagsCache.get(ctx, func(ctx context.Context) ([]Tag, error) {
+		var out struct {
+			Tags []Tag `json:"tags"`
+		}
+		if err := c.Do(ctx, http.MethodGet, "/tags", nil, nil, &out); err != nil {
+			return nil, err
+		}
+		return out.Tags, nil
+	})
 }

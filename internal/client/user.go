@@ -46,13 +46,24 @@ type listUsersResponse struct {
 }
 
 func (c *Client) GetCurrentUser(ctx context.Context) (*User, error) {
-	var out struct {
-		User User `json:"user"`
-	}
-	if err := c.Do(ctx, http.MethodGet, "/users/me", nil, nil, &out); err != nil {
-		return nil, err
-	}
-	return &out.User, nil
+	return c.currentUserCache.get(ctx, func(ctx context.Context) (*User, error) {
+		var out struct {
+			User User `json:"user"`
+		}
+		if err := c.Do(ctx, http.MethodGet, "/users/me", nil, nil, &out); err != nil {
+			return nil, err
+		}
+		return &out.User, nil
+	})
+}
+
+// listAllUsersCached returns the full user list from the cache, fetching on
+// miss. Used by GetUser/GetUserByEmail to coalesce many single-user reads in
+// the same Terraform run into a single API call.
+func (c *Client) listAllUsersCached(ctx context.Context) ([]User, error) {
+	return c.usersCache.get(ctx, func(ctx context.Context) ([]User, error) {
+		return c.ListUsers(ctx, ListUsersFilter{})
+	})
 }
 
 // ListUsers fetches all users matching the filter, paging until the cursor is empty.
@@ -98,9 +109,10 @@ func (c *Client) ListUsers(ctx context.Context, filter ListUsersFilter) ([]User,
 }
 
 // GetUser fetches a single user by ID. The API doesn't expose GET /users/{id};
-// this filters the list endpoint by id.
+// this reads from the cached full-list (rate-limit friendly) and filters
+// client-side.
 func (c *Client) GetUser(ctx context.Context, id int) (*User, error) {
-	users, err := c.ListUsers(ctx, ListUsersFilter{IDs: []int{id}})
+	users, err := c.listAllUsersCached(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -116,7 +128,7 @@ func (c *Client) GetUser(ctx context.Context, id int) (*User, error) {
 // users so callers can detect re-invitation of a previously-deleted user.
 // Returns a NotFound APIError if no match exists.
 func (c *Client) GetUserByEmail(ctx context.Context, email string) (*User, error) {
-	users, err := c.ListUsers(ctx, ListUsersFilter{SearchTerm: email})
+	users, err := c.listAllUsersCached(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -162,6 +174,7 @@ func (c *Client) InviteUser(ctx context.Context, input InviteUserInput) (*User, 
 	if err := c.Do(ctx, http.MethodPost, "/users/invite", nil, body, nil); err != nil {
 		return nil, err
 	}
+	c.usersCache.invalidate()
 
 	// The user record is typically materialized synchronously even though
 	// the email send is async. Retry briefly for eventual consistency.
@@ -225,15 +238,24 @@ func (c *Client) UpdateUser(ctx context.Context, id int, input UpdateUserInput) 
 	if err := c.Do(ctx, http.MethodPut, fmt.Sprintf("/users/%d", id), nil, body, &out); err != nil {
 		return nil, err
 	}
+	c.usersCache.invalidate()
 	return &out, nil
 }
 
 // SoftDeleteUser flips is_deleted=true on the user.
 func (c *Client) SoftDeleteUser(ctx context.Context, id int) error {
-	return c.Do(ctx, http.MethodDelete, fmt.Sprintf("/users/%d", id), nil, nil, nil)
+	err := c.Do(ctx, http.MethodDelete, fmt.Sprintf("/users/%d", id), nil, nil, nil)
+	if err == nil {
+		c.usersCache.invalidate()
+	}
+	return err
 }
 
 // RestoreUser reverses a soft-delete.
 func (c *Client) RestoreUser(ctx context.Context, id int) error {
-	return c.Do(ctx, http.MethodPost, fmt.Sprintf("/users/%d/restore", id), nil, nil, nil)
+	err := c.Do(ctx, http.MethodPost, fmt.Sprintf("/users/%d/restore", id), nil, nil, nil)
+	if err == nil {
+		c.usersCache.invalidate()
+	}
+	return err
 }
