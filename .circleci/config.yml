@@ -56,6 +56,19 @@ jobs:
       - checkout
       - go/mod-download-cached
       - run:
+          name: install Terraform
+          # tfplugindocs uses Terraform to dump the provider's JSON schema. If
+          # terraform isn't already on PATH, tfplugindocs falls back to
+          # downloading it via hc-install — which fails because the HashiCorp
+          # PGP key embedded in hc-install expires periodically. Installing
+          # Terraform up front sidesteps that entirely.
+          command: |
+            TERRAFORM_VERSION=1.9.8
+            curl -fsSL -o /tmp/terraform.zip \
+              "https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip"
+            sudo unzip -q -o /tmp/terraform.zip -d /usr/local/bin
+            terraform version
+      - run:
           name: install tfplugindocs
           command: go install github.com/hashicorp/terraform-plugin-docs/cmd/tfplugindocs@v0.20.0
       - run:
@@ -104,7 +117,7 @@ workflows:
     jobs:
       - release:
           context:
-            - holistics-terraform-release  # holds GPG_*, GITHUB_TOKEN
+            - terraform-registry-release  # shared across all TestGorilla-BV terraform providers; holds GPG_*, GITHUB_TOKEN
           filters:
             tags:
               only: /^v\d+\.\d+\.\d+(-[\w.]+)?$/

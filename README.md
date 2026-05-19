@@ -107,7 +107,7 @@ The repo publishes to `registry.terraform.io/TestGorilla-BV/holistics`. The pipe
    gpg --armor --export <FINGERPRINT>          # public key — paste into the registry UI
    gpg --armor --export-secret-keys <FINGERPRINT> | base64 -w0  # private key for CircleCI
    ```
-3. **CircleCI context** named `holistics-terraform-release` with three env vars:
+3. **CircleCI context** named `terraform-registry-release` (shared across all TestGorilla-BV Terraform providers) with three env vars:
    - `GPG_PRIVATE_KEY` — base64-encoded ASCII-armored private key
    - `GPG_FINGERPRINT` — 40-char hex fingerprint
    - `GITHUB_TOKEN` — classic PAT with `repo` scope (used to upload release assets)
