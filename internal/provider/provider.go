@@ -136,6 +136,7 @@ func (p *HolisticsProvider) DataSources(_ context.Context) []func() datasource.D
 		NewUserDataSource,
 		NewUsersDataSource,
 		NewCurrentUserDataSource,
+		NewGroupsDataSource,
 		NewDashboardDataSource,
 		NewDataSourceDataSource,
 		NewTagsDataSource,

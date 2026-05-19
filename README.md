@@ -24,6 +24,7 @@ A Terraform provider for [Holistics](https://holistics.io), built on the [Plugin
 | `holistics_user`             | `/users` (filtered by `id`)  |
 | `holistics_users`            | `/users` (list, filterable)  |
 | `holistics_current_user`     | `/users/me`                  |
+| `holistics_groups`           | `/groups` (list)             |
 | `holistics_dashboard`        | `/dashboards/{id}`           |
 | `holistics_data_source`      | `/data_sources/{id}`         |
 | `holistics_tags`             | `/tags`                      |

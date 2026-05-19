@@ -39,10 +39,17 @@ resource "holistics_group" "test" {
 			),
 		},
 		{
-			// Import
+			// Import by integer ID.
 			ResourceName:      "holistics_group.test",
 			ImportState:       true,
 			ImportStateVerify: true,
+		},
+		{
+			// Import by group name — looked up via the /groups list.
+			ResourceName:      "holistics_group.test",
+			ImportState:       true,
+			ImportStateVerify: true,
+			ImportStateId:     "Senior Analysts",
 		},
 	})
 }

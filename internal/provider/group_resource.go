@@ -192,13 +192,30 @@ func (r *groupResource) Delete(ctx context.Context, req resource.DeleteRequest, 
 	}
 }
 
+// ImportState accepts either an integer group ID or a group name. Name lookup
+// is the friendlier path since the Holistics admin UI shows names but not IDs;
+// the provider resolves the name to the underlying ID. Group names that
+// happen to parse as integers will be treated as IDs — rename them or use the
+// ID directly if you have a literal numeric group name.
 func (r *groupResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
-	id, err := strconv.ParseInt(req.ID, 10, 64)
-	if err != nil {
-		resp.Diagnostics.AddError("Invalid import ID", fmt.Sprintf("expected integer group ID, got %q", req.ID))
+	if id, err := strconv.ParseInt(req.ID, 10, 64); err == nil {
+		resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), id)...)
 		return
 	}
-	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), id)...)
+	if req.ID == "" {
+		resp.Diagnostics.AddError("Invalid import ID", "expected an integer group ID or a non-empty group name")
+		return
+	}
+	g, err := r.client.GetGroupByName(ctx, req.ID)
+	if err != nil {
+		resp.Diagnostics.AddError("Failed to look up group by name", err.Error())
+		return
+	}
+	if g.ID == nil {
+		resp.Diagnostics.AddError("Group missing ID", fmt.Sprintf("API returned group %q with no ID", req.ID))
+		return
+	}
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), int64(*g.ID))...)
 }
 
 func writeGroupState(ctx context.Context, g *client.Group, state *tfsdk.State) diag.Diagnostics {

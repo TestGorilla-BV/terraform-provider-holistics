@@ -37,6 +37,7 @@ type Client struct {
 	cacheTTL     time.Duration
 
 	usersCache       listCache[User]
+	groupsCache      listCache[Group]
 	tagsCache        listCache[Tag]
 	currentUserCache singleCache[User]
 }
@@ -113,6 +114,7 @@ func New(opts Options) (*Client, error) {
 		cacheTTL:     cacheTTL,
 	}
 	c.usersCache.ttl = cacheTTL
+	c.groupsCache.ttl = cacheTTL
 	c.tagsCache.ttl = cacheTTL
 	c.currentUserCache.ttl = cacheTTL
 	return c, nil
