@@ -22,7 +22,7 @@ type groupsDataSource struct {
 }
 
 type groupItemModel struct {
-	ID      types.Int64 `tfsdk:"id"`
+	ID      types.Int64  `tfsdk:"id"`
 	Name    types.String `tfsdk:"name"`
 	UserIDs types.Set    `tfsdk:"user_ids"`
 }

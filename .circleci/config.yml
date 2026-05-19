@@ -1,7 +1,7 @@
 version: 2.1
 
 orbs:
-  go: circleci/go@3.0.2
+  go: circleci/go@3.0.4
 
 executors:
   go:
@@ -32,23 +32,33 @@ jobs:
     steps:
       - checkout
       - go/mod-download-cached
-      - run:
-          name: go build
-          command: go build ./...
-      - run:
-          name: unit tests
-          command: go test -race -timeout 5m ./...
+      # with-cache wraps the build/test steps with restore + save_cache of
+      # ~/.cache/go-build, Go's compiled-package cache. On a warm cache,
+      # `go test` reuses already-compiled packages instead of recompiling
+      # from source.
+      - go/with-cache:
+          build: true
+          steps:
+            - run:
+                name: go build
+                command: go build ./...
+            - run:
+                name: unit tests
+                command: go test -race -timeout 5m ./...
 
   acceptance:
     executor: go
     steps:
       - checkout
       - go/mod-download-cached
-      - run:
-          name: acceptance tests (in-process mock)
-          environment:
-            TF_ACC: "1"
-          command: go test -timeout 15m -count=1 ./internal/provider/...
+      - go/with-cache:
+          build: true
+          steps:
+            - run:
+                name: acceptance tests (in-process mock)
+                environment:
+                  TF_ACC: "1"
+                command: go test -timeout 15m -count=1 ./internal/provider/...
 
   docs-check:
     executor: go
@@ -56,21 +66,47 @@ jobs:
       - checkout
       - go/mod-download-cached
       - run:
-          name: install Terraform
-          # tfplugindocs uses Terraform to dump the provider's JSON schema. If
-          # terraform isn't already on PATH, tfplugindocs falls back to
-          # downloading it via hc-install — which fails because the HashiCorp
-          # PGP key embedded in hc-install expires periodically. Installing
-          # Terraform up front sidesteps that entirely.
+          name: prepend ~/bin to PATH for later steps
           command: |
-            TERRAFORM_VERSION=1.9.8
-            curl -fsSL -o /tmp/terraform.zip \
-              "https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip"
-            sudo unzip -q -o /tmp/terraform.zip -d /usr/local/bin
-            terraform version
+            mkdir -p "$HOME/bin"
+            echo 'export PATH="$HOME/bin:$PATH"' >> "$BASH_ENV"
+      # Terraform binary (~25MB curl + unzip). tfplugindocs uses it to dump
+      # the provider's JSON schema; if missing, hc-install tries to fetch it
+      # and fails on expired PGP keys. Cache key is the version literal — bump
+      # the version to invalidate.
+      - restore_cache:
+          keys:
+            - v1-terraform-1.9.8
       - run:
-          name: install tfplugindocs
-          command: go install github.com/hashicorp/terraform-plugin-docs/cmd/tfplugindocs@v0.20.0
+          name: install Terraform if not cached
+          command: |
+            if [ ! -x "$HOME/bin/terraform" ]; then
+              TERRAFORM_VERSION=1.9.8
+              curl -fsSL -o /tmp/terraform.zip \
+                "https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip"
+              unzip -q -o /tmp/terraform.zip -d "$HOME/bin"
+            fi
+            terraform version
+      - save_cache:
+          key: v1-terraform-1.9.8
+          paths:
+            - ~/bin/terraform
+      # tfplugindocs is a slow `go install` (heavy dep tree). Cache the
+      # compiled binary — ~/go/bin is on PATH by default on cimg/go.
+      - restore_cache:
+          keys:
+            - v1-tfplugindocs-v0.20.0
+      - run:
+          name: install tfplugindocs if not cached
+          command: |
+            if ! command -v tfplugindocs >/dev/null; then
+              go install github.com/hashicorp/terraform-plugin-docs/cmd/tfplugindocs@v0.20.0
+            fi
+            tfplugindocs --version || true
+      - save_cache:
+          key: v1-tfplugindocs-v0.20.0
+          paths:
+            - ~/go/bin/tfplugindocs
       - run:
           name: regenerate docs
           command: tfplugindocs generate --provider-name holistics
@@ -106,9 +142,12 @@ jobs:
             echo "$GPG_PRIVATE_KEY" | base64 -d | gpg --batch --import
             echo "${GPG_FINGERPRINT}:6:" | gpg --import-ownertrust
             gpg --list-secret-keys --keyid-format=long
-      - run:
-          name: install GoReleaser
-          command: go install github.com/goreleaser/goreleaser/v2@v2.4.5
+      # The orb's install-goreleaser downloads the prebuilt binary from
+      # GoReleaser's GitHub releases (a few seconds) instead of `go install`
+      # rebuilding from source (~30-60s on a cold module cache). No local
+      # cache step needed — the download is fast enough either way.
+      - go/install-goreleaser:
+          version: v2.4.5
       - run:
           name: GoReleaser
           # GITHUB_TOKEN: classic PAT with `repo` scope, used to upload assets

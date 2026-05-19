@@ -92,7 +92,7 @@ func (r *dataAlertResource) Schema(_ context.Context, _ resource.SchemaRequest, 
 	resp.Schema = schema.Schema{
 		Description: "A Holistics data alert that fires when a metric meets a condition.",
 		Attributes: map[string]schema.Attribute{
-			"id":    schema.Int64Attribute{Computed: true, PlanModifiers: []planmodifier.Int64{int64planUseStateForUnknown()}},
+			"id": schema.Int64Attribute{Computed: true, PlanModifiers: []planmodifier.Int64{int64planUseStateForUnknown()}},
 			"title": schema.StringAttribute{
 				Optional:      true,
 				Computed:      true,

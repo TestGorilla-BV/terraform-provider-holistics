@@ -77,7 +77,7 @@ func (r *shareableLinkResource) Schema(_ context.Context, _ resource.SchemaReque
 				Required:    true,
 				Description: "ID of the resource to share.",
 			},
-			"title":            schema.StringAttribute{Optional: true},
+			"title": schema.StringAttribute{Optional: true},
 			"password_enabled": schema.BoolAttribute{
 				Optional:      true,
 				Computed:      true,
