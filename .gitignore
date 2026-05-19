@@ -1,0 +1,6 @@
+/terraform-provider-holistics
+/dist/
+*.tfstate
+*.tfstate.backup
+.terraform/
+.terraform.lock.hcl
