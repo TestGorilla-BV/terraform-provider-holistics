@@ -78,7 +78,11 @@ func (r *shareableLinkResource) Schema(_ context.Context, _ resource.SchemaReque
 				Description: "ID of the resource to share.",
 			},
 			"title":            schema.StringAttribute{Optional: true},
-			"password_enabled": schema.BoolAttribute{Optional: true, Computed: true},
+			"password_enabled": schema.BoolAttribute{
+				Optional:      true,
+				Computed:      true,
+				PlanModifiers: []planmodifier.Bool{boolplanUseStateForUnknown()},
+			},
 			"password": schema.StringAttribute{
 				Optional:      true,
 				Sensitive:     true,

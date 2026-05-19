@@ -4,20 +4,40 @@ import (
 	"context"
 
 	"github.com/hashicorp/terraform-plugin-framework/diag"
+	boolplan "github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
 	int64plan "github.com/hashicorp/terraform-plugin-framework/resource/schema/int64planmodifier"
+	listplan "github.com/hashicorp/terraform-plugin-framework/resource/schema/listplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
+	setplan "github.com/hashicorp/terraform-plugin-framework/resource/schema/setplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
 	"github.com/TestGorilla-BV/terraform-provider-holistics/internal/client"
 )
 
+// UseStateForUnknown plan modifiers. Apply these to every Computed and
+// Optional+Computed attribute so that on Update, Terraform treats unset config
+// values as "keep what's in state" instead of "(known after apply)". Without
+// these, a user who only changes one field sees every other Computed field
+// flagged as a planned change.
 func int64planUseStateForUnknown() planmodifier.Int64 {
 	return int64plan.UseStateForUnknown()
 }
 
 func stringplanUseStateForUnknown() planmodifier.String {
 	return stringplanmodifier.UseStateForUnknown()
+}
+
+func boolplanUseStateForUnknown() planmodifier.Bool {
+	return boolplan.UseStateForUnknown()
+}
+
+func setplanUseStateForUnknown() planmodifier.Set {
+	return setplan.UseStateForUnknown()
+}
+
+func listplanUseStateForUnknown() planmodifier.List {
+	return listplan.UseStateForUnknown()
 }
 
 func setToIntSlice(ctx context.Context, set types.Set) ([]int, diag.Diagnostics) {

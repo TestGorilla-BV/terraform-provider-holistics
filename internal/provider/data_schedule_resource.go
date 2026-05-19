@@ -124,9 +124,10 @@ func (r *dataScheduleResource) Schema(_ context.Context, _ resource.SchemaReques
 				PlanModifiers: []planmodifier.Int64{int64planUseStateForUnknown()},
 			},
 			"title": schema.StringAttribute{
-				Optional:    true,
-				Computed:    true,
-				Description: "Schedule title. Defaults to the source title.",
+				Optional:      true,
+				Computed:      true,
+				Description:   "Schedule title. Defaults to the source title.",
+				PlanModifiers: []planmodifier.String{stringplanUseStateForUnknown()},
 			},
 			"source_type": schema.StringAttribute{
 				Required:    true,
@@ -167,8 +168,9 @@ func scheduleAttribute() map[string]schema.Attribute {
 			Description: "Pause execution.",
 		},
 		"is_archived": schema.BoolAttribute{
-			Computed:    true,
-			Description: "True if paused because the source was archived.",
+			Computed:      true,
+			Description:   "True if paused because the source was archived.",
+			PlanModifiers: []planmodifier.Bool{boolplanUseStateForUnknown()},
 		},
 	}
 }
@@ -186,9 +188,10 @@ func dynamicFilterPresetNested() schema.NestedAttributeObject {
 					"operator": schema.StringAttribute{Required: true},
 					"modifier": schema.StringAttribute{Optional: true},
 					"values": schema.ListAttribute{
-						ElementType: types.StringType,
-						Optional:    true,
-						Computed:    true,
+						ElementType:   types.StringType,
+						Optional:      true,
+						Computed:      true,
+						PlanModifiers: []planmodifier.List{listplanUseStateForUnknown()},
 					},
 				},
 			},

@@ -71,8 +71,9 @@ func (r *userAttributeResource) Schema(_ context.Context, _ resource.SchemaReque
 				Optional:    true,
 			},
 			"is_system_attribute": schema.BoolAttribute{
-				Description: "True for built-in system attributes.",
-				Computed:    true,
+				Description:   "True for built-in system attributes.",
+				Computed:      true,
+				PlanModifiers: []planmodifier.Bool{boolplanUseStateForUnknown()},
 			},
 		},
 	}

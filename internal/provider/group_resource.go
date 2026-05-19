@@ -56,10 +56,11 @@ func (r *groupResource) Schema(_ context.Context, _ resource.SchemaRequest, resp
 				Required:    true,
 			},
 			"user_ids": schema.SetAttribute{
-				Description: "User IDs that are members of this group.",
-				Optional:    true,
-				Computed:    true,
-				ElementType: types.Int64Type,
+				Description:   "User IDs that are members of this group.",
+				Optional:      true,
+				Computed:      true,
+				ElementType:   types.Int64Type,
+				PlanModifiers: []planmodifier.Set{setplanUseStateForUnknown()},
 			},
 		},
 	}

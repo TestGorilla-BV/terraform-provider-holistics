@@ -93,7 +93,11 @@ func (r *dataAlertResource) Schema(_ context.Context, _ resource.SchemaRequest, 
 		Description: "A Holistics data alert that fires when a metric meets a condition.",
 		Attributes: map[string]schema.Attribute{
 			"id":    schema.Int64Attribute{Computed: true, PlanModifiers: []planmodifier.Int64{int64planUseStateForUnknown()}},
-			"title": schema.StringAttribute{Optional: true, Computed: true},
+			"title": schema.StringAttribute{
+				Optional:      true,
+				Computed:      true,
+				PlanModifiers: []planmodifier.String{stringplanUseStateForUnknown()},
+			},
 			"source_id": schema.StringAttribute{
 				Required:    true,
 				Description: "ID of the alert source (DashboardWidget or VizBlock).",
@@ -132,7 +136,12 @@ func (r *dataAlertResource) Schema(_ context.Context, _ resource.SchemaRequest, 
 							Attributes: map[string]schema.Attribute{
 								"operator": schema.StringAttribute{Required: true},
 								"modifier": schema.StringAttribute{Optional: true},
-								"values":   schema.ListAttribute{ElementType: types.StringType, Optional: true, Computed: true},
+								"values": schema.ListAttribute{
+									ElementType:   types.StringType,
+									Optional:      true,
+									Computed:      true,
+									PlanModifiers: []planmodifier.List{listplanUseStateForUnknown()},
+								},
 							},
 						},
 					},

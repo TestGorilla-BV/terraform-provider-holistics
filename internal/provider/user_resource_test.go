@@ -5,6 +5,9 @@ import (
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
+	"github.com/hashicorp/terraform-plugin-testing/knownvalue"
+	"github.com/hashicorp/terraform-plugin-testing/plancheck"
+	"github.com/hashicorp/terraform-plugin-testing/tfjsonpath"
 )
 
 func alreadyExistsRegexp() *regexp.Regexp {
@@ -67,6 +70,65 @@ resource "holistics_user" "alice" {
 			ImportStateVerify:       true,
 			ImportStateId:           "alice@example.com",
 			ImportStateVerifyIgnore: []string{"invite_message"},
+		},
+	})
+}
+
+// Regression test: simulates the post-import scenario. After a user is
+// created with several Computed fields populated (name, title, etc.), changing
+// the role-only in config should produce a plan that touches *only* role —
+// not flag all Computed fields as "(known after apply)".
+//
+// This catches the common Plugin Framework gotcha where Computed and
+// Optional+Computed attributes need explicit `UseStateForUnknown` plan
+// modifiers to remain stable across updates.
+func TestAccUserResource_partialUpdateNoSpuriousDrift(t *testing.T) {
+	withMockServer(t)
+
+	runResourceTest(t, []resource.TestStep{
+		{
+			// Step 1: full config — populates state.
+			Config: providerConfig + `
+resource "holistics_user" "natalie" {
+  email     = "natalie@example.com"
+  role      = "analyst"
+  name      = "Natalie"
+  title     = "Analyst"
+  job_title = "Reporting"
+}
+`,
+		},
+		{
+			// Step 2: only role changes. All other fields are omitted from
+			// config. With UseStateForUnknown plan modifiers, the plan must
+			// show ONLY role + group_ids drift, not name/title/job_title/etc.
+			Config: providerConfig + `
+resource "holistics_user" "natalie" {
+  email = "natalie@example.com"
+  role  = "explorer"
+}
+`,
+			ConfigPlanChecks: resource.ConfigPlanChecks{
+				PreApply: []plancheck.PlanCheck{
+					plancheck.ExpectResourceAction("holistics_user.natalie", plancheck.ResourceActionUpdate),
+					// These attributes were populated in step 1 and aren't in
+					// step 2's config. Without UseStateForUnknown plan
+					// modifiers, the plan would mark them "(known after
+					// apply)" — these assertions catch that regression by
+					// requiring the planned value to equal the prior state
+					// value.
+					plancheck.ExpectKnownValue("holistics_user.natalie", tfjsonpath.New("name"), knownvalue.StringExact("Natalie")),
+					plancheck.ExpectKnownValue("holistics_user.natalie", tfjsonpath.New("title"), knownvalue.StringExact("Analyst")),
+					plancheck.ExpectKnownValue("holistics_user.natalie", tfjsonpath.New("job_title"), knownvalue.StringExact("Reporting")),
+				},
+			},
+			Check: resource.ComposeAggregateTestCheckFunc(
+				resource.TestCheckResourceAttr("holistics_user.natalie", "role", "explorer"),
+				// Crucially: these stay at their step-1 values, not "".
+				resource.TestCheckResourceAttr("holistics_user.natalie", "name", "Natalie"),
+				resource.TestCheckResourceAttr("holistics_user.natalie", "title", "Analyst"),
+				resource.TestCheckResourceAttr("holistics_user.natalie", "job_title", "Reporting"),
+			),
 		},
 	})
 }
