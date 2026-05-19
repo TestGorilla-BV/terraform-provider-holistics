@@ -133,6 +133,60 @@ resource "holistics_user" "natalie" {
 	})
 }
 
+// Regression test: the Holistics /users list endpoint returns a subset of the
+// fields PUT /users/{id} returns — `title` and `job_title` in particular are
+// populated by PUT but omitted by list. Read uses the list, so state ends up
+// with title=null; Update used to write the PUT response, which has title="X"
+// for users whose title was set server-side (e.g. via the Holistics UI before
+// the user was managed by Terraform).
+//
+// Without the "write plan to state on Update" fix, the planmodifier pins
+// title=null in the plan but the PUT response gives the apply a different
+// value, producing "Provider produced inconsistent result after apply".
+func TestAccUserResource_listTruncatedUpdateConsistent(t *testing.T) {
+	srv := withMockServer(t)
+	srv.TruncateListUserDetails = true
+
+	runResourceTest(t, []resource.TestStep{
+		{
+			// Step 1: create the user with no title via config. After this,
+			// the mock has title=nil for the user. State.title is null.
+			Config: providerConfig + `
+resource "holistics_user" "diana" {
+  email = "diana@example.com"
+  role  = "analyst"
+}
+`,
+		},
+		{
+			// Step 2: between steps, simulate the user having had a title
+			// assigned via the Holistics UI. The /users list still truncates
+			// it, so the refresh inside this step's plan keeps state.title
+			// null. Then change only `role` in config — plan.title=null via
+			// UseStateForUnknown. PUT response will include title="Set in
+			// UI"; without the fix the apply check rejects that.
+			PreConfig: func() {
+				if err := srv.SetUserFieldByEmail("diana@example.com", "title", "Set in UI"); err != nil {
+					t.Fatalf("preconfig: %v", err)
+				}
+			},
+			Config: providerConfig + `
+resource "holistics_user" "diana" {
+  email = "diana@example.com"
+  role  = "explorer"
+}
+`,
+			Check: resource.ComposeAggregateTestCheckFunc(
+				resource.TestCheckResourceAttr("holistics_user.diana", "role", "explorer"),
+				// title stays null in state — the list endpoint truncates
+				// it. The server-side value ("Set in UI") is preserved
+				// because our Update PUT body never sent a `title` field.
+				resource.TestCheckNoResourceAttr("holistics_user.diana", "title"),
+			),
+		},
+	})
+}
+
 // Confirms the restore-on-recreate path: invite → soft-delete → re-invite the
 // same email transparently restores the previous record instead of failing.
 func TestAccUserResource_restoreAfterSoftDelete(t *testing.T) {

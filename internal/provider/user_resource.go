@@ -272,12 +272,30 @@ func (r *userResource) Update(ctx context.Context, req resource.UpdateRequest, r
 		GroupIDs:                 &groupIDs,
 	}
 
-	u, err := r.client.UpdateUser(ctx, id, update)
-	if err != nil {
+	if _, err := r.client.UpdateUser(ctx, id, update); err != nil {
 		resp.Diagnostics.AddError("Failed to update user", err.Error())
 		return
 	}
-	resp.Diagnostics.Append(writeUserState(ctx, u, plan.InviteMessage, &resp.State)...)
+
+	// Write the plan back to state rather than the PUT response. The
+	// Holistics /users list endpoint (the one Read uses, since there's no
+	// `GET /users/{id}`) returns a *subset* of the fields that PUT
+	// /users/{id} returns — `title`, `job_title`, and sometimes `group_ids`
+	// are populated by PUT but omitted by list.
+	//
+	// With UseStateForUnknown plan modifiers pinning unmanaged fields to
+	// their last-Read (i.e. list-shaped) values, writing the richer PUT
+	// response back triggers "Provider produced inconsistent result after
+	// apply" — Terraform's check requires post-apply state to match planned
+	// known values exactly.
+	//
+	// Using the plan as state keeps things aligned: the plan was computed
+	// from the same list-shaped data Read will return next time, and any
+	// genuine server-side drift surfaces on the next refresh rather than
+	// crashing the current apply. The PUT itself still succeeds — only the
+	// client-side state shape differs.
+	plan.ID = state.ID
+	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
 
 func (r *userResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {

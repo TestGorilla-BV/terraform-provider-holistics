@@ -6,6 +6,7 @@ package mockserver
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"regexp"
@@ -27,6 +28,13 @@ type Server struct {
 	dataAlerts      map[int]map[string]any
 	shareableLinks  map[string]map[string]any
 	users           map[int]*user
+
+	// TruncateListUserDetails, when set, makes the /users list endpoint
+	// omit title and job_title from each response item — even when the
+	// stored user has them set. This reproduces a real Holistics API quirk
+	// where the list view returns a subset of the fields PUT /users/{id}
+	// returns. Tests that exercise this gap can flip this flag.
+	TruncateListUserDetails bool
 }
 
 type group struct {
@@ -99,6 +107,34 @@ func New() *Server {
 // BaseURL returns the URL to pass to HOLISTICS_BASE_URL.
 func (s *Server) BaseURL() string {
 	return s.URL + "/api/v2"
+}
+
+// SetUserFieldByEmail directly mutates a stored user's field without going
+// through the API surface. Used by acceptance tests that need to simulate a
+// server-side state change that didn't originate from the provider — e.g.
+// "the user already had a title set in Holistics before we imported them".
+// Only string-valued single fields are supported. Returns an error if the
+// user is missing or the field is unsupported.
+func (s *Server) SetUserFieldByEmail(email, field, value string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, u := range s.users {
+		if u.Email == email {
+			switch field {
+			case "title":
+				v := value
+				u.Title = &v
+				return nil
+			case "job_title":
+				v := value
+				u.JobTitle = &v
+				return nil
+			default:
+				return fmt.Errorf("unsupported field %q", field)
+			}
+		}
+	}
+	return fmt.Errorf("user with email %q not found", email)
 }
 
 func (s *Server) nextResourceID() int {
@@ -485,7 +521,14 @@ func (s *Server) handleUsersList(w http.ResponseWriter, r *http.Request) {
 		if searchTerm != "" && !strings.Contains(strings.ToLower(u.Email), searchTerm) {
 			continue
 		}
-		out = append(out, u)
+		if s.TruncateListUserDetails {
+			uc := *u
+			uc.Title = nil
+			uc.JobTitle = nil
+			out = append(out, &uc)
+		} else {
+			out = append(out, u)
+		}
 	}
 	respondJSON(w, http.StatusOK, map[string]any{
 		"users":    out,
