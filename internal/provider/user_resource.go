@@ -217,7 +217,46 @@ func (r *userResource) Create(ctx context.Context, req resource.CreateRequest, r
 		u = updated
 	}
 
-	resp.Diagnostics.Append(writeUserState(ctx, u, plan.InviteMessage, &resp.State)...)
+	// See the Update method comment for the reasoning: PUT /users/{id} can
+	// return a subset of fields (group_ids, title, job_title in particular),
+	// and writing that subset back as state breaks Terraform's plan-vs-actual
+	// consistency check when the planned value was concrete. Build state from
+	// the plan and only fill in fields the API authoritatively computes.
+	plan.ID = types.Int64Value(int64(u.ID))
+	plan.Email = types.StringValue(u.Email)
+	plan.Initials = types.StringValue(u.Initials)
+	plan.IsActivated = types.BoolValue(u.IsActivated)
+	plan.HasAuthenticationToken = types.BoolValue(u.HasAuthenticationToken)
+	plan.CurrentSignInAt = stringFromPtr(u.CurrentSignInAt)
+	plan.LastSignInAt = stringFromPtr(u.LastSignInAt)
+	plan.CreatedAt = types.StringValue(u.CreatedAt)
+	if plan.Role.IsNull() || plan.Role.IsUnknown() {
+		plan.Role = types.StringValue(u.Role)
+	}
+	if plan.Name.IsNull() || plan.Name.IsUnknown() {
+		plan.Name = stringFromPtr(u.Name)
+	}
+	if plan.Title.IsNull() || plan.Title.IsUnknown() {
+		plan.Title = stringFromPtr(u.Title)
+	}
+	if plan.JobTitle.IsNull() || plan.JobTitle.IsUnknown() {
+		plan.JobTitle = stringFromPtr(u.JobTitle)
+	}
+	if plan.AllowAuthenticationToken.IsNull() || plan.AllowAuthenticationToken.IsUnknown() {
+		plan.AllowAuthenticationToken = types.BoolValue(u.AllowAuthenticationToken)
+	}
+	if plan.EnableExportData.IsNull() || plan.EnableExportData.IsUnknown() {
+		plan.EnableExportData = types.BoolValue(u.EnableExportData)
+	}
+	if plan.GroupIDs.IsNull() || plan.GroupIDs.IsUnknown() {
+		groups, d := intSliceToSet(ctx, u.GroupIDs)
+		resp.Diagnostics.Append(d...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		plan.GroupIDs = groups
+	}
+	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
 
 func (r *userResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
